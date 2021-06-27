@@ -1,0 +1,128 @@
+---
+title: "Hypothetical example for GSEA"
+This is only a hypothetical example demonstrating how GSEA work
+---
+
+```{r}
+rm(list=ls()) # Remove existing variables
+require(tidyverse)
+require(data.table)
+require(ggplot2)
+require(PECA)
+require(fgsea)
+library(writexl)
+```
+
+```{r}
+df = data.frame(
+  Genes = c(
+    'Heart attack gene',
+    'Nearsightness gene',
+    'Liver cancer gene',
+    'Lung cancer gene',
+    'Skin cancer gene',
+    'Gene for carbohydrates intake leading to fatness',
+    'Gene for fatty acid intake leading to fatness',
+    'Gene for protein intake leading to fatness',
+    'Fast metabolism gene',
+    'Fit gene'
+  ),
+  Overweight_1 = c(3,6,3,4,3,3,7,4,2,1),
+  Overweight_2 = c(2,5,2,3,2,4,8,4,1,2),
+  Normal_1 = c(4,3,2,3,4,3,1,3,4,5),
+  Normal_2 = c(3,2,2,3,2,2,1,4,5,3)
+)
+
+genesets = data.frame(
+  gs_name = c(
+    'Gene set for overweight',
+    'Gene set for overweight',
+    'Gene set for overweight',
+    'Gene set against overweight',
+    'Gene set against overweight',
+    'Cancer-related gene set',
+    'Cancer-related gene set',
+    'Cancer-related gene set'
+  ),
+  gene_symbol = c(
+    'Gene for carbohydrates intake leading to fatness',
+    'Gene for fatty acid intake leading to fatness',
+    'Gene for protein intake leading to fatness',
+    'Fast metabolism gene',
+    'Fit gene',
+    'Liver cancer gene',
+    'Lung cancer gene',
+    'Skin cancer gene'
+  )
+)
+df
+```
+
+```{r}
+# For demonstration, this example only applies traditional t-test, rather than modified t-test
+df_temp = df
+df_temp[,unlist(lapply(df_temp, is.numeric))]=df[,unlist(lapply(df, is.numeric))]-1
+peca_result = PECA_df(
+  df = df_temp,
+  id = 'Genes',
+  samplenames1 = c('Overweight_1', 'Overweight_2'),
+  #first group - positive logFC
+  samplenames2 = c('Normal_1', 'Normal_2'),
+  #second group - negative logFC
+  normalize = 'none' ,
+  #normalization of the channels
+  test = 't',
+  paired = F
+)
+peca_result
+```
+
+```{r}
+df_temp = df
+row.names(df_temp) = df_temp$Genes
+df_temp = df_temp[-1]
+df_temp = rownames_to_column(log2(df_temp))
+df_temp = gather(df_temp, colname, value, -rowname)
+ggplot(df_temp, aes(colname, rowname, fill = value)) + geom_tile() + scale_fill_distiller(palette = "RdBu")
+```
+
+```{r}
+ranking = peca_result$t
+names(ranking) = rownames(peca_result)
+df_temp = df
+df_temp[,unlist(lapply(df_temp, is.numeric))]=log2(df[,unlist(lapply(df_temp, is.numeric))])
+df_temp$t = ranking[df_temp$Genes]
+```
+
+```{r}
+write_xlsx(df_temp,path = 'res_raw.xlsx')
+```
+
+```{r}
+m_list = genesets %>% split(x = .$gene_symbol, f = .$gs_name)
+
+res = fgsea(
+  pathways = m_list,
+  stats = ranking,
+  minSize = 2,
+  nperm = 100
+)
+```
+
+```{r}
+g = plotEnrichment(m_list[['Gene set for overweight']],ranking)
+g
+ggsave('Gene set for overweight.png',width = 5,height = 3,g)
+```
+
+```{r}
+g = plotEnrichment(m_list[['Gene set against overweight']],ranking)
+g
+ggsave('Gene set against overweight.png',width = 5,height = 3,g)
+```
+
+```{r}
+g = plotEnrichment(m_list[['Cancer-related gene set']],ranking)
+g
+ggsave('Cancer-related gene set.png',width = 5,height = 3,g)
+```
